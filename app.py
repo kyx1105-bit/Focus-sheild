@@ -6,10 +6,7 @@ import streamlit as st
 st.set_page_config(page_title="포커스 쉴드 생성기", page_icon="🛡️")
 
 st.title("🛡️ 포커스 쉴드(Focus Shield) 생성기")
-st.write("""
-클라우드 웹 서버에서는 방문자의 PC 접속을 직접 차단할 수 없습니다. 
-대신, 아래에서 원하는 조건을 설정한 뒤 **내 PC용 맞춤형 차단 스크립트**를 다운로드하세요.
-""")
+st.write("파이썬 설치? **필요 없습니다.** 내 PC 설정에 맞춘 윈도우용 실행 파일(.bat)을 만들어 드립니다.")
 st.divider()
 
 # ==========================================
@@ -26,66 +23,62 @@ st.subheader("2. 차단할 웹사이트 입력")
 default_sites = "www.youtube.com, youtube.com, www.dcinside.com, dcinside.com"
 user_sites = st.text_area("쉼표(,)로 구분해서 적어주세요.", default_sites)
 
-# 텍스트를 리스트 형태로 변환
+# 텍스트를 파워쉘 배열 형태로 변환 (예: "youtube.com", "dcinside.com")
 site_list = [site.strip() for site in user_sites.split(",") if site.strip()]
+ps_array = ", ".join([f'"{site}"' for site in site_list])
 
 # ==========================================
-# 3. 다운로드될 로컬 PC용 파이썬 코드 템플릿
+# 3. 파이썬 불필요: 윈도우 기본 PowerShell & BAT 템플릿
 # ==========================================
-# 사용자가 설정한 값(시간, 사이트)이 반영된 코드를 텍스트로 생성합니다.
-script_template = f"""import time
-from datetime import datetime
-import sys
-import ctypes
+# 파이썬 없이 윈도우에서 바로 도는 배치(BAT) 스크립트입니다.
+# 관리자 권한을 스스로 묻고, 실행 즉시 까만 창을 백그라운드로 숨깁니다.
+bat_template = f"""<# :
+@echo off
+:: 1. 관리자 권한 체크 및 숨김 실행 요청
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    powershell -Command "Start-Process '%~f0' -Verb RunAs -WindowStyle Hidden"
+    exit /b
+)
 
-HOSTS_PATH = r"C:\\Windows\\System32\\drivers\\etc\\hosts"
-REDIRECT_IP = "127.0.0.1"
+:: 2. 권한이 있다면 본 파일 코드를 읽어들여 백그라운드에서 조용히 실행
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "iex ((Get-Content '%~f0') -join [Environment]::NewLine); Invoke-FocusShield"
+exit /b
+#>
 
-BLOCK_LIST = {site_list}
+function Invoke-FocusShield {{
+    $hostsPath = "$env:windir\\System32\\drivers\\etc\\hosts"
+    $redirectIp = "127.0.0.1"
+    $blockList = @({ps_array})
+    $workStart = {work_start}
+    $workEnd = {work_end}
 
-WORK_START = {work_start}
-WORK_END = {work_end}
-
-def is_admin():
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-def main():
-    if not is_admin():
-        print("❌ [권한 오류] '관리자 권한'이 필요합니다.")
-        time.sleep(5)
-        sys.exit(1)
-
-    print(f"🛡️ 포커스 쉴드 작동 중... (차단 시간: {{WORK_START}}시 ~ {{WORK_END}}시)")
-
-    while True:
-        try:
-            current_hour = datetime.now().hour
-            
-            if WORK_START <= current_hour < WORK_END:
-                with open(HOSTS_PATH, 'r+') as file:
-                    content = file.read()
-                    for website in BLOCK_LIST:
-                        if website not in content:
-                            file.write(f"{{REDIRECT_IP}} {{website}}\\n")
-            else:
-                with open(HOSTS_PATH, 'r+') as file:
-                    lines = file.readlines()
-                    file.seek(0)
-                    for line in lines:
-                        if not any(website in line for website in BLOCK_LIST):
-                            file.write(line)
-                    file.truncate()
-            
-            time.sleep(60)
-            
-        except Exception as e:
-            time.sleep(60)
-
-if __name__ == "__main__":
-    main()
+    while ($true) {{
+        $currentHour = (Get-Date).Hour
+        if ($currentHour -ge $workStart -and $currentHour -lt $workEnd) {{
+            # 집중 시간: 차단 모드
+            $content = Get-Content $hostsPath -Raw
+            foreach ($site in $blockList) {{
+                if ($content -notmatch [regex]::Escape($site)) {{
+                    Add-Content -Path $hostsPath -Value "$redirectIp $site"
+                }}
+            }}
+        }} else {{
+            # 휴식 시간: 차단 해제 모드
+            $lines = Get-Content $hostsPath
+            $newLines = $lines | Where-Object {{
+                $line = $_
+                $match = $false
+                foreach ($site in $blockList) {{
+                    if ($line -match [regex]::Escape($site)) {{ $match = $true; break }}
+                }}
+                -not $match
+            }}
+            [IO.File]::WriteAllLines($hostsPath, $newLines)
+        }}
+        Start-Sleep -Seconds 60
+    }}
+}}
 """
 
 st.divider()
@@ -94,11 +87,11 @@ st.divider()
 # 4. 코드 다운로드 버튼
 # ==========================================
 st.subheader("3. 맞춤형 스크립트 다운로드")
-st.write("버튼을 눌러 `focus_shield.pyw` 파일을 다운로드하고, 윈도우에서 '관리자 권한'으로 실행하세요.")
+st.write("버튼을 눌러 `focus_shield.bat` 파일을 다운로드하고, 컴퓨터에서 **더블클릭**만 하세요.")
 
 st.download_button(
-    label="📥 Focus Shield 다운로드 (.pyw)",
-    data=script_template,
-    file_name="focus_shield.pyw",
-    mime="text/x-python"
+    label="📥 Focus Shield 다운로드 (.bat)",
+    data=bat_template,
+    file_name="focus_shield.bat",
+    mime="application/x-msdos-program"
 )
