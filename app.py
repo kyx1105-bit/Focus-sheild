@@ -31,7 +31,6 @@ ps_array = ", ".join([f'"{site}"' for site in site_list])
 # ==========================================
 # 3. Base64 파워쉘 스크립트 생성 (오류 원천 차단)
 # ==========================================
-# 윈도우에서 줄바꿈이나 특수문자 충돌이 없도록 코드를 생성한 뒤 인코딩(암호화)합니다.
 ps_script = f"""
 $hostsPath = "$env:windir\\System32\\drivers\\etc\\hosts"
 $blockList = @({ps_array})
@@ -81,11 +80,11 @@ IF %ERRORLEVEL% NEQ 0 (
     exit /b
 )
 
-:: Base64로 인코딩된 스크립트를 숨김 모드로 실행 (문법 오류 100% 방지)
+:: Base64로 인코딩된 스크립트를 숨김 모드로 실행
 powershell -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand {encoded_command}
 """
 
-# 리눅스 웹 서버의 줄바꿈(\n)을 윈도우 포맷(\r\n)으로 강제 교체하여 cmd.exe 에러 방지
+# 리눅스 웹 서버의 줄바꿈(\n)을 윈도우 포맷(\r\n)으로 강제 교체
 bat_template = bat_template.replace('\r\n', '\n').replace('\n', '\r\n')
 
 st.divider()
@@ -94,4 +93,11 @@ st.divider()
 # 5. 코드 다운로드 버튼
 # ==========================================
 st.subheader("3. 맞춤형 스크립트 다운로드")
-st.write("버튼을 눌러 `focus_
+st.write("버튼을 눌러 `focus_shield.bat` 파일을 다운로드하고, 컴퓨터에서 **더블클릭**만 하세요.")
+
+st.download_button(
+    label="📥 Focus Shield 다운로드 (.bat)",
+    data=bat_template,
+    file_name="focus_shield.bat",
+    mime="application/x-msdos-program"
+)
