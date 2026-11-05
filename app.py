@@ -33,28 +33,31 @@ ps_array = ", ".join([f'"{site}"' for site in site_list])
 ps_script = f"""
 $hostsPath = "$env:windir\\System32\\drivers\\etc\\hosts"
 $blockList = @({ps_array})
-$workStart = {work_start}$workEnd = {work_end}
+$workStart = {work_start}
+$workEnd = {work_end}
 
-while ($true) {{$currentHour = (Get-Date).Hour
-    if ($currentHour -ge$workStart -and $currentHour -lt$workEnd) {{
-        $content = Get-Content$hostsPath -Raw
-        if ($content -eq $null) {{$content = "" }}
-        foreach ($site in$blockList) {{
+while ($true) {{
+    $currentHour = (Get-Date).Hour
+    if ($currentHour -ge $workStart -and $currentHour -lt $workEnd) {{
+        $content = Get-Content $hostsPath -Raw
+        if ($content -eq $null) {{ $content = "" }}
+        foreach ($site in $blockList) {{
             if ($content -notmatch [regex]::Escape($site)) {{
                 Add-Content -Path $hostsPath -Value "127.0.0.1 $site"
             }}
         }}
     }} else {{
-        $lines = Get-Content$hostsPath
-        if ($lines -ne $null) {{$newLines = @()
-            foreach ($line in$lines) {{
-                $match =$false
-                foreach ($site in$blockList) {{
-                    if ($line -match [regex]::Escape($site)) {{ $match =$true; break }}
+        $lines = Get-Content $hostsPath
+        if ($lines -ne $null) {{
+            $newLines = @()
+            foreach ($line in $lines) {{
+                $match = $false
+                foreach ($site in $blockList) {{
+                    if ($line -match [regex]::Escape($site)) {{ $match = $true; break }}
                 }}
-                if (-not $match) {{ $newLines +=$line }}
+                if (-not $match) {{ $newLines += $line }}
             }}
-            [IO.File]::WriteAllLines($hostsPath,$newLines)
+            [IO.File]::WriteAllLines($hostsPath, $newLines)
         }}
     }}
     Start-Sleep -Seconds 60
@@ -65,11 +68,15 @@ encoded_bytes = ps_script.encode('utf-16le')
 encoded_command = base64.b64encode(encoded_bytes).decode('utf-8')
 
 # ==========================================
-# 4. 윈도우용 VBScript 템플릿 세팅 (깜빡임 완벽 제거)
+# 4. 윈도우용 VBScript 템플릿 세팅
 # ==========================================
+chunks = [encoded_command[i:i+500] for i in range(0, len(encoded_command), 500)]
+chunked_vbs = 'psCommand = "-WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand "\n'
+for chunk in chunks:
+    chunked_vbs += f'psCommand = psCommand & "{chunk}"\n'
+
 vbs_template = f"""Set objShell = CreateObject("Shell.Application")
-psCommand = "-WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand {encoded_command}"
-' 0은 창을 완전히 숨김(Hide) 처리한다는 의미이며, runas는 관리자 권한을 요청합니다.
+{chunked_vbs}
 objShell.ShellExecute "powershell.exe", psCommand, "", "runas", 0
 """
 
@@ -86,3 +93,4 @@ st.download_button(
     data=vbs_template,
     file_name="focus_shield.vbs",
     mime="text/vbscript"
+)
